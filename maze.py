@@ -1,161 +1,119 @@
-import random, sys
+import random
+from grouper import Grouper
+import sys
 
+X = 3
+Y = 3
 
-# Constants -- cell marks
-BOTTOMWALL = 0
-RIGHTWALL  = 1
-VISITED    = 2
+class Cell():
+    """Represents a cell in the maze, with an x and y coordinate and its
+    right hand wall and downwards wall.
 
-NORTH = 0
-SOUTH = 1
-WEST  = 2
-EAST  = 3
-
-
-class Maze:
-
-  """Creates a maze and formattes it as text or HTML"""
-
-
-  #*****************************************
-
-  def __init__( self, n_rows, n_cols ):
-    """Create a maze with given number of rows and cols.
-    The path connects upper left and lower right cells.
-    Actually, all cells are connected.
-    Can raise 'MemoryError: Stack overflow' for big arguments, e.g. 100,100
     """
+    def __init__(self, x, y):
+        self.x, self.y = x, y
+        self.right_wall = self.down_wall = None
 
-    self.n_rows = n_rows
-    self.n_cols = n_cols
-    self.maze = [None]*n_rows
+class Wall():
+    """Represents a wall in the maze with its two neighbouring cells.
+    """
+    def __init__(self):
+        self.neighbours = None
+        self.active = True
 
-    # Set up the hedge array - initially all walls intact
-    for i in range(n_rows):
-      self.maze[i] = [None]*n_cols
-      for j in range(n_cols):
-        self.maze[i][j] = [True,True,False] # BOTTOMWALL,RIGHTWALL,VISITED
+def popchoice(seq):
+    """Takes an iterable and pops a random item from it.
+    """
+    return seq.pop(random.randrange(len(seq)))
 
-    # Choose a random starting point
-    currCol = random.randrange(n_cols)
-    currRow = random.randrange(n_rows)
+# A mapping of coord tuple to Cell object    
+cells = {}
+# A list of all the non-edge walls
+walls = []
 
-    # The searh can be quite deep
-    if n_rows*n_cols > sys.getrecursionlimit():
-      sys.setrecursionlimit( n_rows*n_cols+5 )
+# Generate cells
+for y in range(Y):
+    for x in range(X):
+        cells[(x, y)] = Cell(x, y)
 
-    # Recursively Remove Walls - Depth First Algorithm
-    self._make_path( currRow, currCol )
+# Generate walls and add to the neighbouring cells
+for y in range(Y):
+    for x in range(X):
+        current_cell = cells[(x,y)]
+        down_wall = Wall()
+        current_cell.down_wall = down_wall
+        right_wall = Wall()
+        current_cell.right_wall = right_wall
+        if y != Y-1:
+            down_wall.neighbours = (current_cell, cells[(x,y+1)])
+            walls.append(down_wall)
 
-
-  #*****************************************
-
-  def _make_path( self, R, C, D=None ):
-
-    maze = self.maze # speed up a bit
-
-    # Knock out wall between this and previous cell
-    maze[R][C][VISITED] = True;
-
-    if   D==NORTH: maze[R]  [C]  [BOTTOMWALL] = False
-    elif D==SOUTH: maze[R-1][C]  [BOTTOMWALL] = False
-    elif D==WEST:  maze[R]  [C]  [RIGHTWALL]  = False
-    elif D==EAST:  maze[R]  [C-1][RIGHTWALL]  = False
-
-    # Build legal directions array
-    directions = []
-    if R>0            : directions.append(NORTH)
-    if R<self.n_rows-1: directions.append(SOUTH)
-    if C>0            : directions.append(WEST)
-    if C<self.n_cols-1: directions.append(EAST)
-
-    # Shuffle the directions array randomly
-    dir_len = len(directions)
-    for i in range(dir_len):
-      j = random.randrange(dir_len)
-      directions[i],directions[j] = directions[j],directions[i]
-
-    # Call the function recursively
-    for dir in directions:
-      if dir==NORTH:
-        if not maze[R-1][C][VISITED]:
-          self._make_path( R-1,C,NORTH )
-      elif dir==SOUTH:
-        if not maze[R+1][C][VISITED]:
-          self._make_path( R+1,C,SOUTH )
-      elif dir==EAST:
-        if not maze[R][C+1][VISITED]:
-          self._make_path( R,C+1,EAST )
-      elif dir==WEST:
-        if not maze[R][C-1][VISITED]:
-          self._make_path( R,C-1,WEST )
-      #else: raise 'bug:you should never reach here'
+        if x != X-1:
+            right_wall.neighbours = (current_cell, cells[(x+1,y)])
+            walls.append(right_wall)
 
 
-  #*****************************************
+# Get a list of all the cell objects to give to the Grouper            
+cell_list = [cells[key] for key in cells]
 
-  def __str__(self):
-    """Return maze table in ASCII"""
+maze = Grouper(cell_list)
 
-    result = '.' + self.n_cols*'_.'
-    result += '\n'
+for _ in range(len(walls)):
+    # Pop a random wall from the list and get its neighbours
+    wall = popchoice(walls)
+    cell_1, cell_2 = wall.neighbours
+    # If the cells on either side of the wall aren't already connected,
+    # destroy the wall
+    if not maze.joined(cell_1, cell_2):
+        wall.active = False
+        maze.join(cell_1, cell_2)
 
-    for i in range(self.n_rows):
-      result += '|'
+# Draw the maze
 
-      for j in range(self.n_cols):
-        if i==self.n_rows-1 or self.maze[i][j][BOTTOMWALL]:
-          result += '_'
+maze_map = []
+
+x_max = (X*2)+1
+y_max = (Y*2)+1
+
+# Make an empty maze map with True for wall and False for space
+# Make top wall
+maze_map.append([True for _ in range(x_max)])
+for y in range(1, y_max):
+    # Make rows with left side wall
+    maze_map.append([True]+[False for _ in range(1, x_max)])
+
+# Add the down and right walls from each cell to the map
+for coords, cell in cells.items():
+    x, y = coords
+    # Add the intersection wall for each cell (down 1 right 1)
+    maze_map[(y*2)+2][(x*2)+2] = True
+    if cell.right_wall.active:
+        maze_map[(y*2)+1][(x*2)+2] = True
+    if cell.down_wall.active:
+        maze_map[(y*2)+2][(x*2)+1] = True
+
+def output(string):
+    sys.stdout.write(string)
+
+# Print the map
+#for row in maze_map:
+#    for tick in row:
+#        if tick: output('X '),
+#        else: output('0 '),
+#    output('\n')
+
+
+matriz = []
+
+for i, x in enumerate(maze_map):
+    matriz.append([])
+    del x[-2]
+    for j in x:
+        if j:
+            matriz[i].append('X')
         else:
-          result += ' '
-        if j==self.n_cols-1 or self.maze[i][j][RIGHTWALL]:
-          result += '|'
-        else:
-          result += '.'
+            matriz[i].append('0')
 
-      result += '\n'
+del matriz[-2]
 
-    return result
-
-#*****************************************
-
-if __name__ == "__main__":
-
-  syntax = ( "Syntax: %s [[-]n_rows [n_cols]]\n\n"
-             "If n_cols is missing, it will be the same as n_rows\n"
-             "If n_rows is negative, html representation will be generated\n\n"
-             "Examples:\n%s 50 39 -- text maze 50 rows by 39 columns\n"
-             "%s -40   -- html code of 40 x 40 cell maze"
-           )
-
-  # parse arguments if any
-
-  import os.path
-
-  argc = len(sys.argv)
-  name = os.path.basename( sys.argv[0] )
-
-  if argc not in (2,3):
-    print >>sys.stderr, syntax % (name,name,name)
-    sys.exit(1)
-  
-  elif argc == 2:
-    n_rows = n_cols = int(sys.argv[1])
-
-  elif argc == 3:
-    n_rows = int(sys.argv[1])
-    n_cols = int(sys.argv[2])
-
-  # create and print maze
-
-  try:
-    if n_rows > 0:
-      print Maze( n_rows, n_cols )
-    else:
-      maze = Maze( abs(n_rows), abs(n_cols) )
-      print maze.as_html_table()
-  except MemoryError:
-    print "Sorry, n_rows, n_cols were too big"
-
-
-# EOF
+ 

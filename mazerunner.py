@@ -1,13 +1,16 @@
 import pygame, sys
 from pygame.locals import *
-import maze
+import maze3
 
 pygame.init()
 screen = pygame.display.set_mode((600,600))
 
-MAZE= maze.Maze(120,120)
 
-print(MAZE)
+MAZE= maze3.matriz
+print(len(MAZE[0]))
+for x in MAZE:
+    pass
+    print(x)   
 
 while True:
     for event in pygame.event.get():
